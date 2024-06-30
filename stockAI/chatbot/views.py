@@ -12,6 +12,8 @@ import requests
 from bs4 import BeautifulSoup
 from lxml import html
 
+from stockAI.settings import BASE_DIR
+
 def chatbot(request):
     response = ""
     if request.method == 'POST':
@@ -34,12 +36,12 @@ def scrape_stock_data(query):
     # Setup Chrome options
     chrome_options = Options()
     chrome_options.add_argument("--headless")  # Run in headless mode (without GUI)
-    chrome_options.add_argument("--disable-gpu")  # Disable GPU acceleration
+    #chrome_options.add_argument("--disable-gpu")  # Disable GPU acceleration
     chrome_options.add_argument("--no-sandbox")  # Required for running as root
     chrome_options.add_argument("--disable-dev-shm-usage")  # Overcome limited resource problems
 
     # Specify the path to the ChromeDriver
-    driver_path = os.path.join(os.getcwd(), 'chromedriver')  # Adjust to your driver path
+    driver_path = BASE_DIR / 'chromedriver' / 'chromedriver.exe'  # Adjust to your driver path
     service = ChromeService(executable_path=driver_path)
 
     # Initialize the Chrome driver
@@ -59,11 +61,12 @@ def scrape_stock_data(query):
         changepercent_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/section[1]/div[2]/div[1]/section/div/section[2]/div[1]/fin-streamer[3]/span')))
 
         # Extract the text content
-        name = name_element.text.strip()
-        price = price_element.text.strip()
-        volume = volume_element.text.strip()
-        change = change_element.text.strip()
-        changepercent = changepercent_element.text.strip()
+        name = name_element.text.strip() if name_element else "N/A"
+        price = price_element.text.strip() if price_element else "N/A"
+        volume = volume_element.text.strip() if volume_element else "N/A"
+        change = change_element.text.strip() if change_element else "N/A"
+        changepercent = changepercent_element.text.strip() if changepercent_element else "N/A"
+
 
         return {
             'name': name,
