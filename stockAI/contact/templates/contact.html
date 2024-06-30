@@ -1,14 +1,16 @@
-{% load static %}
-<!DOCTYPE html>
-<html>
-<head>
-    <title>StockAI</title>
-    <link rel="stylesheet" type="text/css" href="../static/css/index.css">
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>Contact Page</h1>
-        </div>
-    </div>
-</html>
+<!-- contact/templates/contact/contact.html -->
+{% extends 'base.html' %}
+
+{% block title %}Contact - StockAI{% endblock %}
+
+{% block content %}
+<h1>Contact Us</h1>
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Send</button>
+</form>
+{% if form.errors %}
+    <p style="color:red;">Please correct the error(s) below and resubmit the form.</p>
+{% endif %}
+{% endblock %}

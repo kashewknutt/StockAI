@@ -1,14 +1,19 @@
+<!-- templates/chatbot.html -->
+{% extends 'base.html' %}
 {% load static %}
-<!DOCTYPE html>
-<html>
-<head>
-    <title>StockAI</title>
-    <link rel="stylesheet" type="text/css" href="../static/css/index.css">
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>Chatbot Page</h1>
-        </div>
+
+{% block content %}
+<div class="chat-container">
+    <h1>StockAI Chatbot</h1>
+    <form id="chat-form" method="post" action="{% url 'chatbot' %}">
+        {% csrf_token %}
+        <input type="text" name="query" id="query" placeholder="Ask about a stock..." required>
+        <button type="submit">Ask</button>
+    </form>
+    <div id="chat-response">
+        {% if response %}
+            <pre>{{ response }}</pre>
+        {% endif %}
     </div>
-</html>
+</div>
+{% endblock %}
