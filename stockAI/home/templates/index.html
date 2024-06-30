@@ -1,0 +1,28 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>StockAI</title>
+    <link rel="stylesheet" type="text/css" href="static/css/index.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>StockAI</h1>
+        </div>
+        <div class="content">
+            <div class="content-left">
+                <h2>Stock Prediction</h2>
+                <p>StockAI is a stock prediction tool that uses machine learning to predict stock prices. It uses historical stock data to train a machine learning model that can predict future stock prices. The model is trained on a large dataset of historical stock prices and uses a variety of features to make predictions. StockAI can predict stock prices for a variety of different stocks and can be used to make informed investment decisions.</p>
+            </div>
+            <div class="content-right">
+                <h2>Get Started</h2>
+                <p>Get started with StockAI by entering a stock symbol below. StockAI will use its machine learning model to predict the stock price for the next trading day. Enter a stock symbol below to get started.</p>
+                <form action="/predict" method="post">
+                    <input type="text" name="symbol" placeholder="Enter Stock Symbol">
+                    <button type="submit">Predict</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</html>
