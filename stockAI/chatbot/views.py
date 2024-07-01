@@ -38,7 +38,7 @@ def scrape_stock_data(query):
     chrome_options.add_argument("--headless")  # Run in headless mode (without GUI)
     #chrome_options.add_argument("--disable-gpu")  # Disable GPU acceleration
     chrome_options.add_argument("--no-sandbox")  # Required for running as root
-    chrome_options.add_argument("--disable-dev-shm-usage")  # Overcome limited resource problems
+    #chrome_options.add_argument("--disable-dev-shm-usage")  # Overcome limited resource problems
 
     # Specify the path to the ChromeDriver
     driver_path = BASE_DIR / 'chromedriver' / 'chromedriver.exe'  # Adjust to your driver path
@@ -52,13 +52,15 @@ def scrape_stock_data(query):
         driver.get(url)
 
         # Wait for the elements to be present
-        wait = WebDriverWait(driver, 10)  # 10 seconds wait time
+        wait = WebDriverWait(driver, 0)  # 2 seconds wait time
 
         name_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/section[1]/div[1]/div/section/h1')))
-        price_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/section[1]/div[2]/div[1]/section/div/section[2]/div[1]/fin-streamer[1]/span')))
+        price_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/section[1]/div[2]/div[1]/section/div/section/div[1]/fin-streamer[1]/span')))
         volume_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/div[2]/ul/li[7]/span[2]/fin-streamer')))
-        change_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/section[1]/div[2]/div[1]/section/div/section[2]/div[1]/fin-streamer[2]/span')))
-        changepercent_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/section[1]/div[2]/div[1]/section/div/section[2]/div[1]/fin-streamer[3]/span')))
+        change_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/section[1]/div[2]/div[1]/section/div/section/div[1]/fin-streamer[2]/span')))
+        changepercent_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/section[1]/div[2]/div[1]/section/div/section/div[1]/fin-streamer[3]/span')))
+        marketcap_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/div[2]/ul/li[9]/span[2]/fin-streamer')))
+        peratio_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/div[2]/ul/li[11]/span[2]/fin-streamer')))
 
         # Extract the text content
         name = name_element.text.strip() if name_element else "N/A"
@@ -66,6 +68,8 @@ def scrape_stock_data(query):
         volume = volume_element.text.strip() if volume_element else "N/A"
         change = change_element.text.strip() if change_element else "N/A"
         changepercent = changepercent_element.text.strip() if changepercent_element else "N/A"
+        marketcap = marketcap_element.text.strip() if marketcap_element else "N/A"
+        peratio = peratio_element.text.strip() if peratio_element else "N/A"
 
 
         return {
@@ -73,7 +77,9 @@ def scrape_stock_data(query):
             'price': price,
             'volume': volume,
             'change': change,
-            'changepercent': changepercent
+            'changepercent': changepercent,
+            'marketcap': marketcap,
+            'peratio': peratio
         }
 
     except Exception as e:
@@ -90,5 +96,7 @@ def format_stock_response(stock_data):
         f"Stock Name: {stock_data['name']}\n"
         f"Current Price: {stock_data['price']}\n"
         f"Volume: {stock_data['volume']}\n"
-        f"Price Change: {stock_data['change']} ({stock_data['changepercent']})"
+        f"Price Change: {stock_data['change']} ({stock_data['changepercent']})\n"
+        f"Market Cap: {stock_data['marketcap']}\n"
+        f"PE Ratio: {stock_data['peratio']}"
     )
