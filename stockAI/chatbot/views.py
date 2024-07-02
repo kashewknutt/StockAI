@@ -135,13 +135,13 @@ def scrape_stock_data(query):
         driver.get(url)
         wait = WebDriverWait(driver, 10)  # Increased wait time for better stability
 
-        name_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="quote-header-info"]/div[2]/div[1]/div[1]/h1')))
-        price_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="quote-header-info"]/div[3]/div[1]/div/span[1]')))
-        volume_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="quote-summary"]/div[1]/table/tbody/tr[7]/td[2]')))
-        change_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="quote-header-info"]/div[3]/div[1]/div/span[2]')))
-        changepercent_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="quote-header-info"]/div[3]/div[1]/div/span[3]')))
-        marketcap_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="quote-summary"]/div[2]/table/tbody/tr[1]/td[2]')))
-        peratio_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="quote-summary"]/div[2]/table/tbody/tr[3]/td[2]')))
+        name_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/section[1]/div[1]/div/section/h1')))
+        price_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/section[1]/div[2]/div[1]/section/div/section/div[1]/fin-streamer[1]/span')))
+        volume_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/div[2]/ul/li[7]/span[2]/fin-streamer')))
+        change_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/section[1]/div[2]/div[1]/section/div/section/div[1]/fin-streamer[2]/span')))
+        changepercent_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/section[1]/div[2]/div[1]/section/div/section/div[1]/fin-streamer[3]/span')))
+        marketcap_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/div[2]/ul/li[9]/span[2]/fin-streamer')))
+        peratio_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/div[2]/ul/li[11]/span[2]/fin-streamer')))
 
         name = name_element.text.strip() if name_element else "N/A"
         price = price_element.text.strip() if price_element else "N/A"

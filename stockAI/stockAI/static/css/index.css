@@ -1,0 +1,115 @@
+/* Reset some default styles */
+body, h1, h2, form, input, button {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    font-family: 'Arial', sans-serif;
+    box-sizing: border-box;
+}
+
+/* Set a background color and basic styling */
+body {
+    background-color: #f4f4f9;
+    color: #333;
+    font-size: 16px;
+    line-height: 1.5;
+}
+
+/* Center the chatbot container */
+.chatbot-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+/* Style the chat window */
+.chat-window {
+    background-color: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    width: 100%;
+    max-width: 600px;
+    margin: 20px;
+}
+
+/* Chat log area */
+.chat-log {
+    padding: 20px;
+    height: 400px;
+    overflow-y: auto;
+    border-bottom: 1px solid #ddd;
+}
+
+/* Bot and user message styles */
+.bot-message, .user-message {
+    padding: 10px 20px;
+    margin: 10px 0;
+    border-radius: 10px;
+    word-wrap: break-word;
+}
+
+.bot-message {
+    background-color: #e9effc;
+    color: #0056b3;
+    align-self: flex-start;
+}
+
+.user-message {
+    background-color: #d4edda;
+    color: #155724;
+    align-self: flex-end;
+    text-align: right;
+}
+
+/* Form styling */
+form {
+    display: flex;
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-top: 1px solid #ddd;
+}
+
+input[type="text"] {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 20px;
+    margin-right: 10px;
+    font-size: 16px;
+}
+
+button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+
+button:active {
+    background-color: #004494;
+}
+
+/* Scrollbar styling */
+.chat-log::-webkit-scrollbar {
+    width: 8px;
+}
+
+.chat-log::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 10px;
+}
+
+.chat-log::-webkit-scrollbar-thumb:hover {
+    background: #aaa;
+}
