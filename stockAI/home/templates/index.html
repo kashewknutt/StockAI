@@ -4,7 +4,9 @@
 {% block title %}Home - StockAI{% endblock %}
 
 {% block content %}
-<h1>Welcome to StockAI</h1>
-<p>Get real-time stock information and more.</p>
-<a href="{% url 'chatbot' %}">Try our Chatbot</a>
+<div class="home-content">
+    <h1>Welcome to StockAI</h1>
+    <p>Your go-to platform for real-time stock information and insights.</p>
+    <a class="cta-button" href="{% url 'chatbot' %}">Try our Chatbot</a>
+</div>
 {% endblock %}
