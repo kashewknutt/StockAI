@@ -36,7 +36,8 @@
             const userMessage = messageInput.value.trim();
             if (userMessage) {
                 displayUserMessage(userMessage);
-                sendMessage(userMessage); // Function to send message to server
+                chatForm.submit();
+                //sendMessage(userMessage); // Function to send message to server
                 messageInput.value = ''; // Clear input after sending
             }
         });
@@ -65,7 +66,7 @@
                         'Content-Type': 'application/json',
                         'X-CSRFToken': '{{ csrf_token }}'
                     },
-                    body: JSON.stringify({ message })
+                    message: JSON.stringify({ message })
                 });
                 const data = await response.json();
                 displayBotMessage(data.response); // Display bot's response

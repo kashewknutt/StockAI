@@ -271,9 +271,11 @@ def handle_general_query(query):
     """
     Handle general queries using the conversational pipeline.
     """
+    context = "You are a stock trading helper. You need to understand what the user is talking about and then process and extract the requirement properly."
     print(f"Handling general query: {query}")
+    print(f"context: ",{context})
     try:
-        response = chatbot_pipeline(query)
+        response = chatbot_pipeline(question=query, context=context)
         if response and len(response) > 0 and 'generated_text' in response[0]:
             generated_response = response[0]['generated_text']
             print("Generated chatbot response:", generated_response)
