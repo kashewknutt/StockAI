@@ -19,7 +19,7 @@
         </div>
         <form id="chat-form" method="post" class="chat-form">
             {% csrf_token %}
-            <input type="text" name="query" id="query" placeholder="Ask about a stock..." required>
+            <input type="text" name="message" id="message" placeholder="Ask about a stock..." required>
             <button type="submit">Ask</button>
         </form>
     </div>
@@ -29,14 +29,15 @@
     document.addEventListener("DOMContentLoaded", function() {
         const chatForm = document.getElementById("chat-form");
         const chatLog = document.getElementById("chat-log");
-        const queryInput = document.getElementById("query");
+        const messageInput = document.getElementById("message");
 
         chatForm.addEventListener("submit", function(event) {
             event.preventDefault();
-            const userMessage = queryInput.value.trim();
+            const userMessage = messageInput.value.trim();
             if (userMessage) {
                 displayUserMessage(userMessage);
-                chatForm.submit(); // Submit the form to send the message to the server
+                sendMessage(userMessage); // Function to send message to server
+                messageInput.value = ''; // Clear input after sending
             }
         });
 
@@ -46,6 +47,31 @@
             messageDiv.textContent = message;
             chatLog.appendChild(messageDiv);
             chatLog.scrollTop = chatLog.scrollHeight; // Scroll to the bottom
+        }
+
+        function displayBotMessage(message) {
+            const messageDiv = document.createElement("div");
+            messageDiv.className = 'bot-message';
+            messageDiv.innerHTML = `<p><strong>Bot:</strong></p><pre>${message}</pre>`;
+            chatLog.appendChild(messageDiv);
+            chatLog.scrollTop = chatLog.scrollHeight; // Scroll to the bottom
+        }
+
+        async function sendMessage(message) {
+            try {
+                const response = await fetch("{% url 'chatbot' %}", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    body: JSON.stringify({ message })
+                });
+                const data = await response.json();
+                displayBotMessage(data.response); // Display bot's response
+            } catch (error) {
+                console.error('Error sending message:', error);
+            }
         }
     });
 </script>

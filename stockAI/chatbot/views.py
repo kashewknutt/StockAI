@@ -1,4 +1,4 @@
-# views.py
+import os
 import joblib
 import numpy as np
 import pandas as pd
@@ -8,26 +8,34 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
-import os
-from django.shortcuts import render
-from django.http import JsonResponse
 import requests
 from bs4 import BeautifulSoup
+from django.shortcuts import render
+from django.http import JsonResponse
 import spacy
+from transformers import pipeline, AutoTokenizer, AutoModelForTokenClassification, AutoModelForSeq2SeqLM
+import difflib  # For finding similar company names
+import json
+import uuid  # Importing uuid module for generating unique user IDs
 
-from .train_model import train_for_symbol
+from .train_model import train_for_symbol, fetch_historical_data
 from stockAI.settings import BASE_DIR
 from .companyDatabase import company_to_symbol
-import difflib  # For finding similar company names
 from .credentials import alpha_vantage_key
 
-# Load the spaCy model
+# Initialize the transformers-based models
+print("Initializing models...")
+tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
+chatbot_pipeline = pipeline('question-answering', model="facebook/blenderbot-400M-distill")
+
 nlp = spacy.load('en_core_web_sm')
 
 def lookup_stock_symbol(company_name):
     """
     Lookup stock symbol using Alpha Vantage API or another external service.
     """
+    print(f"Looking up stock symbol for: {company_name}")
     api_key = alpha_vantage_key  # Replace with your Alpha Vantage API key
     base_url = 'https://www.alphavantage.co/query'
     
@@ -49,6 +57,7 @@ def predict_stock(symbol):
     """
     Predict the stock performance using the trained model.
     """
+    print(f"Predicting stock for symbol: {symbol}")
     model_path = os.path.join('models', f'{symbol}_model.pkl')
     
     if not os.path.exists(model_path):
@@ -79,30 +88,11 @@ def predict_stock(symbol):
     except Exception as e:
         return f"An error occurred during prediction: {str(e)}"
 
-# Reuse or import the fetch_historical_data function from train_model.py
-def fetch_historical_data(symbol):
-    """Fetch historical stock data from Alpha Vantage."""
-    url = 'https://www.alphavantage.co/query'
-    params = {
-        'function': 'TIME_SERIES_DAILY',
-        'symbol': symbol,
-        'apikey': alpha_vantage_key,
-        'outputsize': 'full'
-    }
-    response = requests.get(url, params=params)
-    data = response.json()
-    if 'Time Series (Daily)' in data:
-        df = pd.DataFrame(data['Time Series (Daily)']).transpose()
-        df.columns = ['open', 'high', 'low', 'close', 'volume']
-        df = df.astype(float)
-        return df
-    else:
-        raise ValueError(f"Could not fetch data for symbol: {symbol}")
-
 def extract_stock_symbol(query):
     """
     Extract the stock symbol or company name from the user's query.
     """
+    print(f"Extracting stock symbol from query: {query}")
     doc = nlp(query.lower())  # Convert the query to lowercase for better consistency
     print("Parsed entities:", [(entity.text, entity.label_) for entity in doc.ents])
 
@@ -134,14 +124,23 @@ def extract_stock_symbol(query):
         if possible_symbols:
             return possible_symbols[0]
     
-    # Step 2: Use spaCy to extract entities
-    for entity in doc.ents:
-        if entity.label_ in ["ORG", "PRODUCT"]:
-            potential_symbol = company_to_symbol.get(entity.text.upper().strip())
+    # Step 2: Use transformers to extract entities
+    inputs = tokenizer(query, return_tensors="pt")
+    outputs = model(**inputs).logits
+    predictions = outputs.argmax(dim=2)
+    predicted_entities = [
+        (tokenizer.convert_ids_to_tokens(inputs.input_ids[0][i]), model.config.id2label[predictions[0][i].item()])
+        for i in range(len(inputs.input_ids[0]))
+    ]
+    print("Predicted entities:", predicted_entities)
+
+    for entity, label in predicted_entities:
+        if label in ["ORG", "PRODUCT"]:
+            potential_symbol = company_to_symbol.get(entity.upper().strip())
             if potential_symbol:
                 return potential_symbol  # Return the mapped stock symbol
             else:
-                return entity.text.upper().strip()  # Return the detected entity text
+                return entity.upper().strip()  # Return the detected entity text
     
     # Step 3: Check for financial keywords in the context
     for token in doc:
@@ -186,6 +185,7 @@ def find_similar_companies(company_name):
     """
     Find similar companies based on the input company name.
     """
+    print(f"Finding similar companies for: {company_name}")
     company_list = company_to_symbol.keys()
     similar_companies = difflib.get_close_matches(company_name.upper(), company_list, n=5, cutoff=0.5)
     return similar_companies
@@ -194,41 +194,18 @@ def handle_ambiguous_query(user_query):
     """
     Handle ambiguous queries by suggesting similar company names.
     """
+    print(f"Handling ambiguous query: {user_query}")
     similar_companies = find_similar_companies(user_query)
     if similar_companies:
         return f"I'm not sure which company you mean. Did you mean one of these?\n" + "\n".join(similar_companies)
     else:
         return f"Sorry, I couldn't find any companies related to '{user_query}'. Please provide a more specific name or the exact stock symbol."
 
-def chatbot(request):
-    response = ""
-    if request.method == 'POST':
-        user_query = request.POST.get('query', '').strip()
-
-        if user_query:
-            # Extract the stock symbol from the query
-            stock_symbol = extract_stock_symbol(user_query)  # Function to extract the stock symbol
-
-            if stock_symbol:
-                # Check if the model for the stock symbol already exists
-                model_path = os.path.join('models', f'{stock_symbol}_model.pkl')
-                if not os.path.exists(model_path):
-                    # Train the model for the specified stock symbol
-                    try:
-                        print(f"Training model for {stock_symbol}...")
-                        train_for_symbol(stock_symbol)  # Train and save the model
-                        response = f"Model for {stock_symbol} has been trained and saved."
-                    except Exception as e:
-                        response = f"An error occurred while training the model for {stock_symbol}: {str(e)}"
-                else:
-                    response = f"Model for {stock_symbol} already exists."
-                
-                prediction = predict_stock(stock_symbol)
-                response += f"\nPrediction for {stock_symbol}: {prediction}"
-
-    return render(request, 'chatbot.html', {'response': response})
-
 def scrape_stock_data(query):
+    """
+    Scrape stock data from Yahoo Finance for the given stock symbol.
+    """
+    print(f"Scraping stock data for symbol: {query}")
     stock_symbol = query.upper().strip()
     url = f"https://finance.yahoo.com/quote/{stock_symbol}"
     
@@ -243,45 +220,66 @@ def scrape_stock_data(query):
         driver.get(url)
         wait = WebDriverWait(driver, 10)  # Increased wait time for better stability
 
-        name_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/section[1]/div[1]/div/section/h1')))
-        price_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/section[1]/div[2]/div[1]/section/div/section/div[1]/fin-streamer[1]/span')))
-        volume_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/div[2]/ul/li[7]/span[2]/fin-streamer')))
-        change_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/section[1]/div[2]/div[1]/section/div/section/div[1]/fin-streamer[2]/span')))
-        changepercent_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/section[1]/div[2]/div[1]/section/div/section/div[1]/fin-streamer[3]/span')))
-        marketcap_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/div[2]/ul/li[9]/span[2]/fin-streamer')))
-        peratio_element = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="nimbus-app"]/section/section/section/article/div[2]/ul/li[11]/span[2]/fin-streamer')))
-
-        name = name_element.text.strip() if name_element else "N/A"
-        price = price_element.text.strip() if price_element else "N/A"
-        volume = volume_element.text.strip() if volume_element else "N/A"
-        change = change_element.text.strip() if change_element else "N/A"
-        changepercent = changepercent_element.text.strip() if changepercent_element else "N/A"
-        marketcap = marketcap_element.text.strip() if marketcap_element else "N/A"
-        peratio = peratio_element.text.strip() if peratio_element else "N/A"
-
-        return {
-            'name': name,
-            'price': price,
-            'volume': volume,
-            'change': change,
-            'changepercent': changepercent,
-            'marketcap': marketcap,
-            'peratio': peratio
-        }
+        name_element = wait.until(EC.presence_of_element_located((By.XPATH, "//h1[contains(@data-reactid,'7')]")))
+        name = name_element.text.strip()
+        price_element = wait.until(EC.presence_of_element_located((By.XPATH, "//span[contains(@data-reactid,'14')]")))
+        price = price_element.text.strip()
+        
+        return f"{name} stock is currently priced at {price}."
 
     except Exception as e:
-        print(f"An error occurred: {e}")
-        return None
-
+        return f"An error occurred while fetching stock data: {str(e)}"
     finally:
         driver.quit()
 
-def format_stock_response(stock_data):
-    return (
-        f"Stock Name: {stock_data['name']}\n"
-        f"Current Price: {stock_data['price']}\n"
-        f"Volume: {stock_data['volume']}\n"
-        f"Price Change: {stock_data['change']} ({stock_data['changepercent']})\n"
-        f"Market Cap: {stock_data['marketcap']}\n"
-        f"PE Ratio: {stock_data['peratio']}"
-    )
+def chatbot(request):
+    """
+    Handle the chatbot interaction: both rendering the page and processing chat requests.
+    """
+    if request.method == 'POST':
+        user_message = request.POST.get('message', '').strip()
+        print("Received user message:", user_message)
+        # Create a unique user ID for session management
+        user_id = request.session.session_key or str(uuid.uuid4())
+        request.session['user_id'] = user_id  # Store the user ID in the session
+
+        # Process the user's query and get the response
+        response = process_query(user_message)
+        print("Chatbot response:", response)
+
+        return JsonResponse({'response': response})
+
+    # For GET requests, render the chatbot page
+    return render(request, 'chatbot.html')
+
+def process_query(query):
+    """
+    Process the user's query to provide stock information or predictions.
+    """
+    print(f"Processing user query: {query}")
+    if any(word in query.lower() for word in ['predict', 'forecast', 'estimate']):
+        symbol = extract_stock_symbol(query)
+        return predict_stock(symbol)
+
+    if any(word in query.lower() for word in ['price', 'current', 'value', 'rate']):
+        symbol = extract_stock_symbol(query)
+        return scrape_stock_data(symbol)
+
+    return handle_general_query(query)
+
+def handle_general_query(query):
+    """
+    Handle general queries using the conversational pipeline.
+    """
+    print(f"Handling general query: {query}")
+    try:
+        response = chatbot_pipeline(query)
+        if response and len(response) > 0 and 'generated_text' in response[0]:
+            generated_response = response[0]['generated_text']
+            print("Generated chatbot response:", generated_response)
+            return generated_response  # Return the generated response text
+        else:
+            return "Sorry, I couldn't generate a response to your query."
+
+    except Exception as e:
+        return f"Sorry, I encountered an error while processing your request: {str(e)}"
