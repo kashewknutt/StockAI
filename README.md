@@ -206,7 +206,10 @@ This project is licensed under the MIT License. You are free to use, modify, and
 **MIT License**
 
 ```plaintext
-Copyright (c) 2024 [Your Name or Organization]
+
+MIT License
+
+Copyright (c) 2024 [Kashew Knutt](github.com/kashewknutt)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
