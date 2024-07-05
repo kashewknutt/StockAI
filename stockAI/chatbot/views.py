@@ -13,7 +13,8 @@ from bs4 import BeautifulSoup
 from django.shortcuts import render
 from django.http import JsonResponse
 import spacy
-from transformers import pipeline, AutoTokenizer, AutoModelForTokenClassification, AutoModelForSeq2SeqLM
+import torch
+from transformers import pipeline, AutoTokenizer, AutoModelForTokenClassification, AutoModelForCausalLM
 import difflib  # For finding similar company names
 import json
 import uuid  # Importing uuid module for generating unique user IDs
@@ -28,6 +29,11 @@ print("Initializing models...")
 tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
 chatbot_pipeline = pipeline('question-answering', model="facebook/blenderbot-400M-distill")
+
+# Initialize DialoGPT for conversational tasks
+print("Initializing DialoGPT for conversation...")
+conversation_model = AutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-medium")
+conversation_tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-medium")
 
 nlp = spacy.load('en_core_web_sm')
 
@@ -84,6 +90,9 @@ def predict_stock(symbol):
         recommendation = "Buy" if change > 0 else "Hold/Sell"
         
         return f"Predicted closing price for {symbol}: {predicted_close:.2f}. Recommendation: {recommendation}."
+    
+    except Exception as e:
+        return f"An error occurred during prediction: {str(e)}"
     
     except Exception as e:
         return f"An error occurred during prediction: {str(e)}"
@@ -199,7 +208,7 @@ def handle_ambiguous_query(user_query):
     if similar_companies:
         return f"I'm not sure which company you mean. Did you mean one of these?\n" + "\n".join(similar_companies)
     else:
-        return f"Sorry, I couldn't find any companies related to '{user_query}'. Please provide a more specific name or the exact stock symbol."
+        return "Sorry, I couldn't find any similar companies. Please provide more details."
 
 def scrape_stock_data(query):
     """
@@ -237,7 +246,7 @@ def chatbot(request):
     Handle the chatbot interaction: both rendering the page and processing chat requests.
     """
     if request.method == 'POST':
-        user_message = request.POST.get('message', '').strip()
+        user_message = json.loads(request.body).get('message', '').strip()  # Changed to load JSON from the body
         print("Received user message:", user_message)
         # Create a unique user ID for session management
         user_id = request.session.session_key or str(uuid.uuid4())
@@ -267,21 +276,33 @@ def process_query(query):
 
     return handle_general_query(query)
 
-def handle_general_query(query):
+def handle_general_query(query, history=[]):
     """
     Handle general queries using the conversational pipeline.
     """
-    context = "You are a stock trading helper. You need to understand what the user is talking about and then process and extract the requirement properly."
     print(f"Handling general query: {query}")
-    print(f"context: ",{context})
+    context = "You are a stock trading helper. You need to understand what the user is talking about and then process and extract the requirement properly."
+
     try:
-        response = chatbot_pipeline(question=query, context=context)
-        if response and len(response) > 0 and 'generated_text' in response[0]:
-            generated_response = response[0]['generated_text']
-            print("Generated chatbot response:", generated_response)
-            return generated_response  # Return the generated response text
-        else:
-            return "Sorry, I couldn't generate a response to your query."
+        # Tokenize the input along with conversation history
+        input_ids = conversation_tokenizer.encode(query + conversation_tokenizer.eos_token, return_tensors='pt')
+
+        # Append conversation history if available
+        bot_input_ids = torch.cat([torch.tensor(history), input_ids], dim=-1) if history else input_ids
+        
+        # Generate a response from DialoGPT
+        chat_history_ids = conversation_model.generate(bot_input_ids, max_length=1000, pad_token_id=conversation_tokenizer.eos_token_id)
+        
+        # Convert the output tokens to text
+        response = conversation_tokenizer.decode(chat_history_ids[:, bot_input_ids.shape[-1]:][0], skip_special_tokens=True)
+        
+        print("Generated chatbot response:", response)
+        
+        # Update the conversation history
+        history.append(chat_history_ids)
+        
+        return response
 
     except Exception as e:
+        print("Error during query handling:", str(e))
         return f"Sorry, I encountered an error while processing your request: {str(e)}"

@@ -10,6 +10,7 @@
     </div>
     <div class="chat-window">
         <div id="chat-log" class="chat-log">
+            <!-- Initial Bot Message or Response Handling -->
             {% if response %}
                 <div class="bot-message">
                     <p><strong>Bot:</strong></p>
@@ -36,8 +37,7 @@
             const userMessage = messageInput.value.trim();
             if (userMessage) {
                 displayUserMessage(userMessage);
-                chatForm.submit();
-                //sendMessage(userMessage); // Function to send message to server
+                sendMessage(userMessage);  // Send the message via AJAX
                 messageInput.value = ''; // Clear input after sending
             }
         });
@@ -66,12 +66,13 @@
                         'Content-Type': 'application/json',
                         'X-CSRFToken': '{{ csrf_token }}'
                     },
-                    message: JSON.stringify({ message })
+                    body: JSON.stringify({ message })  // Fixed 'body' instead of 'message'
                 });
                 const data = await response.json();
                 displayBotMessage(data.response); // Display bot's response
             } catch (error) {
                 console.error('Error sending message:', error);
+                displayBotMessage("An error occurred. Please try again.");
             }
         }
     });
