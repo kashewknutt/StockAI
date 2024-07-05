@@ -93,9 +93,6 @@ def predict_stock(symbol):
     
     except Exception as e:
         return f"An error occurred during prediction: {str(e)}"
-    
-    except Exception as e:
-        return f"An error occurred during prediction: {str(e)}"
 
 def extract_stock_symbol(query):
     """
@@ -103,93 +100,102 @@ def extract_stock_symbol(query):
     """
     print(f"Extracting stock symbol from query: {query}")
     doc = nlp(query.lower())  # Convert the query to lowercase for better consistency
+    print(doc.ents)
     print("Parsed entities:", [(entity.text, entity.label_) for entity in doc.ents])
 
     # Financial keywords and common company query keywords
     financial_keywords = ["stock", "shares", "price", "market", "trade", "value", "company", "tell", "about"]
-    
+
     # Preprocess query to handle common synonyms or variations
     normalized_query = query.upper().strip()
-    
+    print("Pre-Processed Query: ", normalized_query)
+
     # List of common company-related keywords and potential synonyms to improve matching
     common_company_keywords = ["INC", "CORP", "LTD", "COMPANY", "CORPORATION", "ENTERPRISES", "HOLDINGS", "GROUP"]
-    
+
     # Step 1: Check if the user directly provides a stock symbol
     if "STOCK SYMBOL" in query.upper():
         # Extract the provided symbol
         possible_symbols = [word for word in normalized_query.split() if word.isupper() and word not in ["THE", "EXACT", "STOCK", "SYMBOL", "IS"]]
         if possible_symbols:
             return possible_symbols[0]
-        
+
     if "EXACT SYMBOL" in query.upper():
         # Extract the provided symbol
         possible_symbols = [word for word in normalized_query.split() if word.isupper() and word not in ["IS", "THE", "EXACT", "SYMBOL"]]
         if possible_symbols:
             return possible_symbols[0]  # Return the symbol directly provided by the user
-        
+
     if "SYMBOL" in query.upper():
         # Extract the provided symbol
         possible_symbols = [word for word in normalized_query.split() if word.isupper() and word not in ["IS", "THE", "EXACT", "SYMBOL"]]
         if possible_symbols:
             return possible_symbols[0]
-    
+
     # Step 2: Use transformers to extract entities
-    inputs = tokenizer(query, return_tensors="pt")
-    outputs = model(**inputs).logits
-    predictions = outputs.argmax(dim=2)
-    predicted_entities = [
-        (tokenizer.convert_ids_to_tokens(inputs.input_ids[0][i]), model.config.id2label[predictions[0][i].item()])
-        for i in range(len(inputs.input_ids[0]))
-    ]
-    print("Predicted entities:", predicted_entities)
+    try:
+        inputs = tokenizer(query, return_tensors="pt")
+        if 'input_ids' not in inputs or inputs['input_ids'] is None:
+            return handle_ambiguous_query(normalized_query)
+        
+        outputs = model(**inputs).logits
+        predictions = outputs.argmax(dim=2)
+        predicted_entities = [
+            (tokenizer.convert_ids_to_tokens(inputs.input_ids[0][i]), model.config.id2label[predictions[0][i].item()])
+            for i in range(len(inputs.input_ids[0]))
+        ]
+        print("Predicted entities:", predicted_entities)
 
-    for entity, label in predicted_entities:
-        if label in ["ORG", "PRODUCT"]:
-            potential_symbol = company_to_symbol.get(entity.upper().strip())
-            if potential_symbol:
-                return potential_symbol  # Return the mapped stock symbol
-            else:
-                return entity.upper().strip()  # Return the detected entity text
-    
-    # Step 3: Check for financial keywords in the context
-    for token in doc:
-        if token.text.lower() in financial_keywords:
-            prev_token = token.nbor(-1) if token.i > 0 else None
-            next_token = token.nbor(1) if token.i < len(doc) - 1 else None
+        for entity, label in predicted_entities:
+            if label in ["ORG", "PRODUCT"]:
+                potential_symbol = company_to_symbol.get(entity.upper().strip())
+                if potential_symbol:
+                    return potential_symbol  # Return the mapped stock symbol
+                else:
+                    return entity.upper().strip()  # Return the detected entity text
 
-            if prev_token and prev_token.ent_type_ in ["ORG", "PRODUCT"]:
-                return prev_token.text.upper().strip()
-            if next_token and next_token.ent_type_ in ["ORG", "PRODUCT"]:
-                return next_token.text.upper().strip()
-    
-    # Step 4: Use common company names or symbols if no entities matched
-    words = normalized_query.split()
-    for word in words:
-        if word in company_to_symbol:
-            return company_to_symbol[word]
+        # Step 3: Check for financial keywords in the context
+        for token in doc:
+            if token.text.lower() in financial_keywords:
+                prev_token = token.nbor(-1) if token.i > 0 else None
+                next_token = token.nbor(1) if token.i < len(doc) - 1 else None
 
-    # Step 5: Try to match using a more comprehensive approach
-    for word in words:
-        if word in company_to_symbol:
-            return company_to_symbol[word]
-        if any(keyword in word for keyword in common_company_keywords):
-            possible_match = company_to_symbol.get(word)
-            if possible_match:
-                return possible_match
-    
-    # Step 6: If no match found, attempt to find the most similar known companies
-    similar_companies = find_similar_companies(normalized_query)
-    if similar_companies:
-        return similar_companies  # Return the list of similar companies for user confirmation
-    
-    # Step 7: Use external API to look up the stock symbol dynamically
-    matches = lookup_stock_symbol(normalized_query)
-    if matches:
-        return matches[0]['1. symbol']  # Return the best match symbol
-    
-    # Fallback: Ask the user to provide the exact company symbol
-    return handle_ambiguous_query(normalized_query)
+                if prev_token and prev_token.ent_type_ in ["ORG", "PRODUCT"]:
+                    return prev_token.text.upper().strip()
+                if next_token and next_token.ent_type_ in ["ORG", "PRODUCT"]:
+                    return next_token.text.upper().strip()
 
+        # Step 4: Use common company names or symbols if no entities matched
+        words = normalized_query.split()
+        for word in words:
+            if word in company_to_symbol:
+                return company_to_symbol[word]
+
+        # Step 5: Try to match using a more comprehensive approach
+        for word in words:
+            if word in company_to_symbol:
+                return company_to_symbol[word]
+            if any(keyword in word for keyword in common_company_keywords):
+                possible_match = company_to_symbol.get(word)
+                if possible_match:
+                    return possible_match
+
+        # Step 6: If no match found, attempt to find the most similar known companies
+        similar_companies = find_similar_companies(normalized_query)
+        if similar_companies:
+            return similar_companies  # Return the list of similar companies for user confirmation
+
+        # Step 7: Use external API to look up the stock symbol dynamically
+        matches = lookup_stock_symbol(normalized_query)
+        if matches:
+            return matches[0]['1. symbol']  # Return the best match symbol
+
+        # Fallback: Ask the user to provide the exact company symbol
+        return handle_ambiguous_query(normalized_query)
+    
+    except Exception as e:
+        print("Error during entity extraction:", str(e))
+        return handle_ambiguous_query(normalized_query)
 def find_similar_companies(company_name):
     """
     Find similar companies based on the input company name.
@@ -197,6 +203,7 @@ def find_similar_companies(company_name):
     print(f"Finding similar companies for: {company_name}")
     company_list = company_to_symbol.keys()
     similar_companies = difflib.get_close_matches(company_name.upper(), company_list, n=5, cutoff=0.5)
+    print("Similar Companies:" ,similar_companies)
     return similar_companies
 
 def handle_ambiguous_query(user_query):
@@ -266,15 +273,21 @@ def process_query(query):
     Process the user's query to provide stock information or predictions.
     """
     print(f"Processing user query: {query}")
-    if any(word in query.lower() for word in ['predict', 'forecast', 'estimate']):
-        symbol = extract_stock_symbol(query)
-        return predict_stock(symbol)
+    try:
+        if any(word in query.lower() for word in ['predict', 'forecast', 'estimate']):
+            symbol = extract_stock_symbol(query)
+            return predict_stock(symbol)
 
-    if any(word in query.lower() for word in ['price', 'current', 'value', 'rate']):
-        symbol = extract_stock_symbol(query)
-        return scrape_stock_data(symbol)
+        if any(word in query.lower() for word in ['price', 'current', 'value', 'rate']):
+            symbol = extract_stock_symbol(query)
+            return scrape_stock_data(symbol)
 
-    return handle_general_query(query)
+        # Handle general queries using conversational pipeline
+        return handle_general_query(query)
+
+    except Exception as e:
+        print("Error during query handling:", str(e))
+        return f"Sorry, I encountered an error while processing your request: {str(e)}"
 
 def handle_general_query(query, history=[]):
     """
