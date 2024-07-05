@@ -113,30 +113,48 @@ stock-chatbot/
 │
 ├── chatbot/
 │   ├── templates/
-│   │   ├── chatbot.html       # HTML template for the chatbot page
-│   │   ├── index.html         # Landing page
-│   │   └── contact.html       # Contact page
-│   ├── static/
-│   │   └── css/
-│   │       └── styles.css     # Custom CSS for styling
-│   ├── views.py               # Django views
-│   ├── models.py              # Data models (if any)
-│   ├── urls.py                # URL routing for the chatbot app
-│   ├── companyDatabase.py     # Company name to stock symbol mapping
-│   ├── credentials.py         # Secure handling of API keys (not committed to version control)
-│   ├── train_model.py         # Scripts for training the stock prediction model
+│   │   ├── chatbot.html              # HTML template for the chatbot page
+│   │   ├── index.html                # Landing page
+│   │   └── contact.html              # Contact page
+│   ├── views.py                      # Django views
+│   ├── models.py                     # Data models (if any)
+│   ├── urls.py                       # URL routing for the chatbot app
+│   ├── companyDatabase.py            # Company name to stock symbol mapping
+│   ├── credentials.py                # Secure handling of API keys (not committed to version control)
+│   ├── train_model.py                # Scripts for training the stock prediction model
+│   └── ...
+├── contact/
+│   ├── templates/
+│   │   ├── contact_success.html      # HTML template for the contact page
+│   │   └── contact.html              # Contact page
+│   ├── views.py                      # Django views
+│   ├── models.py                     # Data models (if any)
+│   ├── urls.py                       # URL routing for the chatbot app
+│   └── ...
+├── home/
+│   ├── templates/
+│   │   └── index.html                # Contact page
+│   ├── views.py                      # Django views
+│   ├── models.py                     # Data models (if any)
+│   ├── urls.py                       # URL routing for the chatbot app
 │   └── ...
 │
 ├── stockAI/
-│   ├── settings.py            # Django project settings
-│   ├── urls.py                # URL routing for the entire project
-│   ├── wsgi.py                # WSGI application
-│   ├── asgi.py                # ASGI application
+│   ├── templates/
+│   │   └── base.html                 # Base page
+│   ├── static/
+│   │   └── css/
+│   │       └── styles.css            # Custom CSS for styling
+│   ├── credentials.py                # Secure handling of email details (not committed to version control)
+│   ├── settings.py                   # Django project settings
+│   ├── urls.py                       # URL routing for the entire project
+│   ├── wsgi.py                       # WSGI application
+│   ├── asgi.py                       # ASGI application
 │   └── ...
 │
-├── manage.py                  # Django management script
-├── requirements.txt           # List of project dependencies
-└── README.md                  # Project documentation
+├── manage.py                         # Django management script
+├── requirements.txt                  # List of project dependencies
+└── README.md                         # Project documentation
 ```
 
 ### Contributing
@@ -149,13 +167,13 @@ Contributions are welcome and encouraged! To contribute to this project, please 
 2. **Clone the Repository**:
    - Clone your forked repository to your local machine using:
      ```bash
-     git clone https://github.com/your-username/stock-chatbot.git
+     git clone https://github.com/kashewknutt/stockAI.git
      ```
 
 3. **Create a New Branch**:
    - Create a new branch for your feature or bug fix:
      ```bash
-     git checkout -b feature/your-feature-name
+     git checkout -b feature/kashewknutt
      ```
 
 4. **Make Your Changes**:
