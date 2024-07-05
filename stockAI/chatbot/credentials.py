@@ -1,1 +1,1 @@
-alpha_vantage_key='4IAYAKVS2Y1I6G9U'
+alpha_vantage_key='your-key'
