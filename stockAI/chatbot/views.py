@@ -14,26 +14,68 @@ from django.shortcuts import render
 from django.http import JsonResponse
 import spacy
 import torch
-from transformers import pipeline, AutoTokenizer, AutoModelForTokenClassification, AutoModelForCausalLM
-import difflib  # For finding similar company names
+from transformers import pipeline, AutoTokenizer, AutoModelForTokenClassification, AutoModelForCausalLM, BertForQuestionAnswering, BertTokenizer
+import difflib
 import json
-import uuid  # Importing uuid module for generating unique user IDs
+import uuid
+from sentence_transformers import SentenceTransformer
+import faiss
+import cx_Oracle
 
 from .train_model import train_for_symbol, fetch_historical_data
 from stockAI.settings import BASE_DIR
 from .companyDatabase import company_to_symbol
-from .credentials import alpha_vantage_key
+from .credentials import alpha_vantage_key, username, password, dsn
 
 # Initialize the transformers-based models
 print("Initializing models...")
 tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
-chatbot_pipeline = pipeline('question-answering', model="facebook/blenderbot-400M-distill")
+
+# Load pre-trained Sentence Transformer model
+print("Initializing Sentence Transformer model...")
+sentence_model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+
+# Replace Blenderbot with a more suitable model for Q&A and conversations
+qa_tokenizer = BertTokenizer.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad")
+qa_model = BertForQuestionAnswering.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad")
 
 # Initialize DialoGPT for conversational tasks
 print("Initializing DialoGPT for conversation...")
 conversation_model = AutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-medium")
 conversation_tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-medium")
+
+# Connect to Oracle Database
+connection = cx_Oracle.connect(user=username, password=password, dsn=dsn)
+cursor = connection.cursor()
+
+# Fetch stock embeddings from Oracle
+def fetch_stock_embeddings():
+    cursor.execute("SELECT stock_name, embedding FROM StockEmbeddings")
+    results = cursor.fetchall()
+    stock_names = [row[0] for row in results]
+    embeddings = np.array([row[1] for row in results])
+    return stock_names, embeddings
+
+stock_names, embeddings = fetch_stock_embeddings()
+
+# Build a FAISS index for the embeddings
+dimension = embeddings.shape[1]  # Dimension of embeddings
+index = faiss.IndexFlatL2(dimension)
+index.add(embeddings)
+
+# Other functions (lookup_stock_symbol, predict_stock, etc.) remain unchanged
+
+def extract_stock_symbol_with_vector_search(query):
+    """
+    Extract the stock symbol or company name from the user's query using vector search.
+    """
+    print(f"Extracting stock symbol from query using vector search: {query}")
+    query_embedding = sentence_model.encode([query])[0]  # Convert query to a vector
+    distances, indices = index.search(np.array([query_embedding]), k=1)  # Find the nearest vector
+    nearest_stock_name = stock_names[indices[0][0]]
+    print(f"Identified stock name: {nearest_stock_name}")
+    return nearest_stock_name
 
 nlp = spacy.load('en_core_web_sm')
 
@@ -64,7 +106,7 @@ def predict_stock(symbol):
     Predict the stock performance using the trained model.
     """
     print(f"Predicting stock for symbol: {symbol}")
-    model_path = os.path.join('models', f'{symbol}_model.pkl')
+    model_path = os.path.join(BASE_DIR, 'models', f'{symbol}_model.pkl')
     
     if not os.path.exists(model_path):
         return f"No model found for {symbol}. Please train the model first."
@@ -95,128 +137,140 @@ def predict_stock(symbol):
         return f"An error occurred during prediction: {str(e)}"
 
 def extract_stock_symbol(query):
-    """
+    """ 
     Extract the stock symbol or company name from the user's query.
     """
     print(f"Extracting stock symbol from query: {query}")
     doc = nlp(query.lower())  # Convert the query to lowercase for better consistency
-    print(doc.ents)
-    print("Parsed entities:", [(entity.text, entity.label_) for entity in doc.ents])
+    print("Named entities identified by Spacy:", [(entity.text, entity.label_) for entity in doc.ents])
 
-    # Financial keywords and common company query keywords
     financial_keywords = ["stock", "shares", "price", "market", "trade", "value", "company", "tell", "about"]
 
-    # Preprocess query to handle common synonyms or variations
     normalized_query = query.upper().strip()
     print("Pre-Processed Query: ", normalized_query)
 
-    # List of common company-related keywords and potential synonyms to improve matching
     common_company_keywords = ["INC", "CORP", "LTD", "COMPANY", "CORPORATION", "ENTERPRISES", "HOLDINGS", "GROUP"]
 
-    # Step 1: Check if the user directly provides a stock symbol
-    if "STOCK SYMBOL" in query.upper():
-        # Extract the provided symbol
+    if "STOCK SYMBOL" in query.upper() or "EXACT SYMBOL" in query.upper() or "SYMBOL" in query.upper():
         possible_symbols = [word for word in normalized_query.split() if word.isupper() and word not in ["THE", "EXACT", "STOCK", "SYMBOL", "IS"]]
+        print("Possible symbols extracted directly from the query:", possible_symbols)
         if possible_symbols:
             return possible_symbols[0]
 
-    if "EXACT SYMBOL" in query.upper():
-        # Extract the provided symbol
-        possible_symbols = [word for word in normalized_query.split() if word.isupper() and word not in ["IS", "THE", "EXACT", "SYMBOL"]]
-        if possible_symbols:
-            return possible_symbols[0]  # Return the symbol directly provided by the user
-
-    if "SYMBOL" in query.upper():
-        # Extract the provided symbol
-        possible_symbols = [word for word in normalized_query.split() if word.isupper() and word not in ["IS", "THE", "EXACT", "SYMBOL"]]
-        if possible_symbols:
-            return possible_symbols[0]
-
-    # Step 2: Use transformers to extract entities
     try:
+        print("Tokenizing the query for entity extraction...")
         inputs = tokenizer(query, return_tensors="pt")
-        if 'input_ids' not in inputs or inputs['input_ids'] is None:
+        print("Tokenized input tensors:", inputs)
+
+        if 'input_ids' not in inputs or inputs['input_ids'].size(0) == 0:
+            print("No valid input tokens found. Handling as an ambiguous query.")
             return handle_ambiguous_query(normalized_query)
-        
+
+        print("Generating model outputs...")
         outputs = model(**inputs).logits
+        print("Model output logits:", outputs)
+
+        if not torch.is_tensor(outputs) or outputs.dim() != 3:
+            print("Invalid or unexpected model output. Handling as an ambiguous query.")
+            return handle_ambiguous_query(normalized_query)
+
         predictions = outputs.argmax(dim=2)
+        print("Model predictions:", predictions)
+
         predicted_entities = [
             (tokenizer.convert_ids_to_tokens(inputs.input_ids[0][i]), model.config.id2label[predictions[0][i].item()])
             for i in range(len(inputs.input_ids[0]))
         ]
-        print("Predicted entities:", predicted_entities)
+        print("Predicted entities from the model:", predicted_entities)
 
         for entity, label in predicted_entities:
             if label in ["ORG", "PRODUCT"]:
                 potential_symbol = company_to_symbol.get(entity.upper().strip())
+                print(f"Entity '{entity}' identified as {label}. Potential symbol: {potential_symbol}")
                 if potential_symbol:
-                    return potential_symbol  # Return the mapped stock symbol
+                    return potential_symbol
                 else:
-                    return entity.upper().strip()  # Return the detected entity text
+                    return entity.upper().strip()
 
-        # Step 3: Check for financial keywords in the context
+        print("Checking for financial keywords in the context...")
         for token in doc:
             if token.text.lower() in financial_keywords:
                 prev_token = token.nbor(-1) if token.i > 0 else None
                 next_token = token.nbor(1) if token.i < len(doc) - 1 else None
 
                 if prev_token and prev_token.ent_type_ in ["ORG", "PRODUCT"]:
+                    print(f"Financial keyword '{token.text}' found with preceding entity '{prev_token.text}'")
                     return prev_token.text.upper().strip()
                 if next_token and next_token.ent_type_ in ["ORG", "PRODUCT"]:
+                    print(f"Financial keyword '{token.text}' found with following entity '{next_token.text}'")
                     return next_token.text.upper().strip()
 
-        # Step 4: Use common company names or symbols if no entities matched
+        print("Matching common company names or symbols...")
         words = normalized_query.split()
         for word in words:
             if word in company_to_symbol:
+                print(f"Common company or symbol matched: {word}")
                 return company_to_symbol[word]
 
-        # Step 5: Try to match using a more comprehensive approach
+        print("Performing comprehensive matching for company names...")
         for word in words:
             if word in company_to_symbol:
                 return company_to_symbol[word]
             if any(keyword in word for keyword in common_company_keywords):
                 possible_match = company_to_symbol.get(word)
                 if possible_match:
+                    print(f"Matched possible company keyword: {word} -> {possible_match}")
                     return possible_match
 
-        # Step 6: If no match found, attempt to find the most similar known companies
-        similar_companies = find_similar_companies(normalized_query)
-        if similar_companies:
-            return similar_companies  # Return the list of similar companies for user confirmation
+        print("Using difflib for potential company name matching...")
+        closest_match = difflib.get_close_matches(normalized_query, list(company_to_symbol.keys()), n=1, cutoff=0.6)
+        if closest_match:
+            print(f"Closest match found: {closest_match[0]}")
+            return company_to_symbol[closest_match[0]]
 
-        # Step 7: Use external API to look up the stock symbol dynamically
-        matches = lookup_stock_symbol(normalized_query)
-        if matches:
-            return matches[0]['1. symbol']  # Return the best match symbol
-
-        # Fallback: Ask the user to provide the exact company symbol
+        print("No direct match found. Handling as an ambiguous query.")
         return handle_ambiguous_query(normalized_query)
-    
+
     except Exception as e:
-        print("Error during entity extraction:", str(e))
+        print(f"Error during entity extraction: {str(e)}. Handling as an ambiguous query.")
         return handle_ambiguous_query(normalized_query)
-def find_similar_companies(company_name):
-    """
-    Find similar companies based on the input company name.
-    """
-    print(f"Finding similar companies for: {company_name}")
-    company_list = company_to_symbol.keys()
-    similar_companies = difflib.get_close_matches(company_name.upper(), company_list, n=5, cutoff=0.5)
-    print("Similar Companies:" ,similar_companies)
-    return similar_companies
 
-def handle_ambiguous_query(user_query):
+def handle_ambiguous_query(query):
     """
-    Handle ambiguous queries by suggesting similar company names.
+    Handle queries where no clear stock symbol or company name is identified.
     """
-    print(f"Handling ambiguous query: {user_query}")
-    similar_companies = find_similar_companies(user_query)
-    if similar_companies:
-        return f"I'm not sure which company you mean. Did you mean one of these?\n" + "\n".join(similar_companies)
-    else:
-        return "Sorry, I couldn't find any similar companies. Please provide more details."
+    print(f"Handling ambiguous query: {query}")
+    possible_symbols = lookup_stock_symbol(query)
+    if possible_symbols:
+        return possible_symbols[0].get('1. symbol')
+    return "Unknown"
 
+def get_current_stock_price(symbol):
+    """
+    Scrape the current stock price from a financial website.
+    """
+    print(f"Fetching current stock price for: {symbol}")
+    url = f"https://www.marketwatch.com/investing/stock/{symbol.lower()}"
+    options = Options()
+    options.headless = True
+    service = ChromeService(executable_path='/path/to/chromedriver')  # Replace with your chromedriver path
+    driver = webdriver.Chrome(service=service, options=options)
+    
+    try:
+        driver.get(url)
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".intraday__price .value"))
+        )
+        price_element = driver.find_element(By.CSS_SELECTOR, ".intraday__price .value")
+        price = price_element.text
+        print(f"Retrieved stock price: {price}")
+        return price
+    except Exception as e:
+        print(f"Error fetching stock price: {str(e)}")
+        return "Error retrieving stock price."
+    finally:
+        driver.quit()
+    
 def scrape_stock_data(query):
     """
     Scrape stock data from Yahoo Finance for the given stock symbol.
@@ -275,14 +329,13 @@ def process_query(query):
     print(f"Processing user query: {query}")
     try:
         if any(word in query.lower() for word in ['predict', 'forecast', 'estimate']):
-            symbol = extract_stock_symbol(query)
+            symbol = extract_stock_symbol_with_vector_search(query)
             return predict_stock(symbol)
 
         if any(word in query.lower() for word in ['price', 'current', 'value', 'rate']):
-            symbol = extract_stock_symbol(query)
+            symbol = extract_stock_symbol_with_vector_search(query)
             return scrape_stock_data(symbol)
 
-        # Handle general queries using conversational pipeline
         return handle_general_query(query)
 
     except Exception as e:
